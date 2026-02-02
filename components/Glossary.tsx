@@ -1,12 +1,17 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, ChevronDown, ChevronUp, Hash, Loader2, Edit2, Trash2, Plus, X, Save } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Hash, Loader2, Edit2, Trash2, Plus, X, Save, Link as LinkIcon, Check } from 'lucide-react';
 import { APP_ACCENT_COLOR, CATEGORIES } from '../constants';
 import { TermCategory, Term } from '../types';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
 
-export const Glossary: React.FC = () => {
+interface GlossaryProps {
+  onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
+  showControls?: boolean;
+}
+
+export const Glossary: React.FC<GlossaryProps> = ({ onScroll, showControls = true }) => {
   const { isAdmin } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<TermCategory>(TermCategory.ALL);
@@ -14,6 +19,7 @@ export const Glossary: React.FC = () => {
   const [terms, setTerms] = useState<Term[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -34,6 +40,21 @@ export const Glossary: React.FC = () => {
 
       if (error) throw error;
       setTerms(data as Term[]);
+      
+      // Check URL parameters for permalink
+      const urlParams = new URLSearchParams(window.location.search);
+      const termId = urlParams.get('term');
+      if (termId) {
+        setExpandedId(termId);
+        // Find the term and scroll to it if possible?
+        // Actually, user wants "a page only displaying that one definition".
+        // We can filter the list if termId exists.
+        if (termId) {
+          // If termId is present, we might want to isolate it or just expand it.
+          // User said "directs to a page only displaying that one definition".
+          // So we should probably filter by ID if it's in the URL.
+        }
+      }
     } catch (error) {
       console.error('Error fetching terms:', error);
     } finally {
@@ -42,13 +63,31 @@ export const Glossary: React.FC = () => {
   };
 
   const filteredTerms = useMemo(() => {
+    // Check for permalink param
+    const urlParams = new URLSearchParams(window.location.search);
+    const permalinkId = urlParams.get('term');
+
+    if (permalinkId) {
+       return terms.filter(t => t.id === permalinkId);
+    }
+
     return terms.filter((term) => {
       const matchesSearch = term.term.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             term.definition.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory = selectedCategory === TermCategory.ALL || term.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
-  }, [searchTerm, selectedCategory, terms]);
+  }, [searchTerm, selectedCategory, terms, window.location.search]);
+
+  // Handle back button to clear permalink
+  useEffect(() => {
+    const handlePopState = () => {
+      // Force re-render to pick up new URL params
+      setSearchTerm(searchTerm); 
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const toggleExpand = (id: string) => {
     if (!isEditMode) {
@@ -78,6 +117,24 @@ export const Glossary: React.FC = () => {
     e.stopPropagation();
     setEditingTerm(term);
     setIsModalOpen(true);
+  };
+
+  const handleCopyPermalink = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    const url = new URL(window.location.href);
+    url.searchParams.set('term', id);
+    navigator.clipboard.writeText(url.toString());
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const clearPermalink = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('term');
+    window.history.pushState({}, '', url);
+    // Force re-render logic is a bit tricky with just state.
+    // Simplest way is to reload or just update a dummy state to trigger useMemo
+    setSearchTerm(''); // This triggers re-calc
   };
 
   const handleOpenAdd = () => {
@@ -129,69 +186,95 @@ export const Glossary: React.FC = () => {
     }
   };
 
-  return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 transition-colors">
-      {/* Search and Filter Header */}
-      <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm shadow-sm border-b border-slate-100 dark:border-slate-800 px-4 py-3 space-y-3 transition-colors">
-        <div className="max-w-5xl mx-auto w-full space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-5 w-5 text-slate-400 dark:text-slate-500" />
-              </div>
-              <input
-                type="text"
-                className="block w-full pl-10 pr-3 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl leading-5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-[#09BE82] focus:border-transparent transition duration-150 ease-in-out sm:text-sm"
-                placeholder="Search acronyms, slang..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            
-            {isAdmin && (
-              <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
-                <button
-                  onClick={() => setIsEditMode(!isEditMode)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isEditMode ? 'bg-white dark:bg-slate-700 shadow-sm text-[#09BE82]' : 'text-slate-500'}`}
-                >
-                  {isEditMode ? 'Editing On' : 'Edit Mode'}
-                </button>
-                {isEditMode && (
-                  <button
-                    onClick={handleOpenAdd}
-                    className="p-1.5 rounded-lg bg-[#09BE82] text-white hover:opacity-90 transition-opacity"
-                    title="Add New Term"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+  const isPermalinkMode = new URLSearchParams(window.location.search).has('term');
 
-          {/* Category Pills */}
-          <div className="flex space-x-2 overflow-x-auto pb-1 no-scrollbar md:-mx-0">
-            {CATEGORIES.map((category) => (
-              <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
-                className={`
-                  whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-medium transition-colors
-                  ${selectedCategory === category 
-                    ? `bg-[${APP_ACCENT_COLOR}] text-white shadow-md` 
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}
-                `}
-                style={selectedCategory === category ? { backgroundColor: APP_ACCENT_COLOR } : {}}
-              >
-                {category}
-              </button>
-            ))}
-          </div>
+  return (
+    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 transition-colors relative">
+      {/* Search and Filter Header - Hide if permalink mode */}
+      {!isPermalinkMode && (
+        <div 
+            className={`
+            sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm shadow-sm border-b border-slate-100 dark:border-slate-800 px-4 py-3 space-y-3 transition-all duration-300 ease-in-out
+            ${showControls ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 absolute w-full top-0'}
+            `}
+        >
+            <div className="max-w-5xl mx-auto w-full space-y-3">
+            <div className="flex items-center gap-3">
+                <div className="relative flex-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="h-5 w-5 text-slate-400 dark:text-slate-500" />
+                </div>
+                <input
+                    type="text"
+                    className="block w-full pl-10 pr-3 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl leading-5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-[#09BE82] focus:border-transparent transition duration-150 ease-in-out sm:text-sm"
+                    placeholder="Search acronyms, slang..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                </div>
+                
+                {isAdmin && (
+                <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <button
+                    onClick={() => setIsEditMode(!isEditMode)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isEditMode ? 'bg-white dark:bg-slate-700 shadow-sm text-[#09BE82]' : 'text-slate-500'}`}
+                    >
+                    {isEditMode ? 'Editing On' : 'Edit Mode'}
+                    </button>
+                    {isEditMode && (
+                    <button
+                        onClick={handleOpenAdd}
+                        className="p-1.5 rounded-lg bg-[#09BE82] text-white hover:opacity-90 transition-opacity"
+                        title="Add New Term"
+                    >
+                        <Plus className="w-4 h-4" />
+                    </button>
+                    )}
+                </div>
+                )}
+            </div>
+
+            {/* Category Pills */}
+            <div className="flex space-x-2 overflow-x-auto pb-1 no-scrollbar md:-mx-0">
+                {CATEGORIES.map((category) => (
+                <button
+                    key={category}
+                    onClick={() => setSelectedCategory(category)}
+                    className={`
+                    whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-medium transition-colors
+                    ${selectedCategory === category 
+                        ? `bg-[${APP_ACCENT_COLOR}] text-white shadow-md` 
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}
+                    `}
+                    style={selectedCategory === category ? { backgroundColor: APP_ACCENT_COLOR } : {}}
+                >
+                    {category}
+                </button>
+                ))}
+            </div>
+            </div>
         </div>
-      </div>
+      )}
+
+      {/* Permalink Header - Show ONLY if permalink mode */}
+      {isPermalinkMode && (
+        <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm shadow-sm border-b border-slate-100 dark:border-slate-800 px-4 py-4">
+             <div className="max-w-5xl mx-auto w-full flex items-center justify-between">
+                <button 
+                    onClick={clearPermalink}
+                    className="flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+                >
+                    <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800">
+                        <X className="w-5 h-5" />
+                    </div>
+                    <span className="font-medium text-sm">View All Terms</span>
+                </button>
+             </div>
+        </div>
+      )}
 
       {/* Content List */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="flex-1 overflow-y-auto px-4 py-4" onScroll={onScroll}>
         <div className="max-w-5xl mx-auto w-full">
           {loading ? (
             <div className="flex justify-center items-center py-20">
@@ -204,12 +287,16 @@ export const Glossary: React.FC = () => {
               <p className="text-sm">Try adjusting your search or category.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-24 md:pb-8">
+            <div className={isPermalinkMode ? "flex justify-center pt-10" : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-24 md:pb-8"}>
               {filteredTerms.map((term) => (
                 <div 
                   key={term.id} 
                   onClick={() => toggleExpand(term.id)}
-                  className={`bg-white dark:bg-slate-900 rounded-xl shadow-sm border overflow-hidden transition-all duration-200 h-fit ${isEditMode ? 'border-dashed border-[#09BE82]/50 ring-1 ring-[#09BE82]/10' : 'border-slate-100 dark:border-slate-800 cursor-pointer hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700'}`}
+                  className={`
+                    bg-white dark:bg-slate-900 rounded-xl shadow-sm border overflow-hidden transition-all duration-200 h-fit 
+                    ${isPermalinkMode ? 'w-full max-w-2xl shadow-lg border-slate-200 dark:border-slate-700' : ''}
+                    ${isEditMode ? 'border-dashed border-[#09BE82]/50 ring-1 ring-[#09BE82]/10' : 'border-slate-100 dark:border-slate-800 cursor-pointer hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700'}
+                  `}
                 >
                   <div className="flex items-start p-4">
                     <div 
@@ -223,35 +310,46 @@ export const Glossary: React.FC = () => {
                         <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 truncate pr-2">
                           {term.term}
                         </h3>
-                        {isEditMode ? (
-                          <div className="flex gap-1">
-                            <button 
-                              onClick={(e) => handleOpenEdit(e, term)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-[#09BE82] hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button 
-                              onClick={(e) => handleDelete(e, term.id)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          expandedId === term.id ? (
-                            <ChevronUp className="h-5 w-5 text-slate-400" />
-                          ) : (
-                            <ChevronDown className="h-5 w-5 text-slate-400" />
-                          )
-                        )}
+                        <div className="flex gap-1">
+                            {!isEditMode && !isPermalinkMode && (
+                                <button 
+                                onClick={(e) => handleCopyPermalink(e, term.id)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-[#09BE82] hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                                title="Copy Permalink"
+                                >
+                                {copiedId === term.id ? <Check className="w-4 h-4 text-green-500" /> : <LinkIcon className="w-4 h-4" />}
+                                </button>
+                            )}
+                            {isEditMode ? (
+                            <>
+                                <button 
+                                onClick={(e) => handleOpenEdit(e, term)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-[#09BE82] hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                                >
+                                <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button 
+                                onClick={(e) => handleDelete(e, term.id)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                >
+                                <Trash2 className="w-4 h-4" />
+                                </button>
+                            </>
+                            ) : (
+                            (expandedId === term.id || isPermalinkMode) ? (
+                                <ChevronUp className="h-5 w-5 text-slate-400" />
+                            ) : (
+                                <ChevronDown className="h-5 w-5 text-slate-400" />
+                            )
+                            )}
+                        </div>
                       </div>
-                      <p className={`text-sm text-slate-600 dark:text-slate-400 leading-relaxed ${expandedId === term.id || isEditMode ? '' : 'line-clamp-2'}`}>
+                      <p className={`text-sm text-slate-600 dark:text-slate-400 leading-relaxed ${(expandedId === term.id || isEditMode || isPermalinkMode) ? '' : 'line-clamp-2'}`}>
                         {term.definition}
                       </p>
                       
                       {/* Expanded Content */}
-                      {(expandedId === term.id || isEditMode) && (
+                      {(expandedId === term.id || isEditMode || isPermalinkMode) && (
                         <div className="mt-3 pt-3 border-t border-slate-50 dark:border-slate-800 animate-fadeIn">
                           {term.example && (
                             <div className="mb-2">
