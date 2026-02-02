@@ -18,9 +18,10 @@ enum Tab {
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>(Tab.GLOSSARY);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [showMobileHeader, setShowMobileHeader] = useState(true);
-  const [showMobileNav, setShowMobileNav] = useState(true);
+  const [showHeader, setShowHeader] = useState(true);
+  const [showBottomNav, setShowBottomNav] = useState(true);
   const lastScrollY = useRef(0);
+  const mainContentRef = useRef<HTMLElement>(null);
   
   // Initialize theme from localStorage or system preference
   const [isDark, setIsDark] = useState(() => {
@@ -47,35 +48,50 @@ const App: React.FC = () => {
 
   const toggleTheme = () => setIsDark(!isDark);
 
-  const handleGlobalScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    // Only apply to tabs other than Glossary, because Glossary handles its own 
-    // internal scrolling and reports back via the onScroll prop.
-    if (activeTab === Tab.GLOSSARY) return;
-
-    const currentScrollY = e.currentTarget.scrollTop;
-    const scrollingDown = currentScrollY > lastScrollY.current;
+  // Scroll handling logic
+  const handleScroll = () => {
+    const main = mainContentRef.current;
+    if (!main) return;
     
-    if (scrollingDown && currentScrollY > 50) {
-      setShowMobileHeader(false);
-      setShowMobileNav(false);
-    } else {
-      setShowMobileNav(true);
-      if (currentScrollY <= 10) {
-        setShowMobileHeader(true);
-      }
-    }
-    lastScrollY.current = currentScrollY;
+    // We need to find the scrollable container inside main.
+    // The active tab component usually has the scrollable div.
+    // However, since we can't easily attach refs to internal divs of child components from here,
+    // we might need to pass the onScroll handler down or wrap them.
+    // Better approach: Since our main structure has the active tab component filling the space,
+    // and those components have `overflow-y-auto`, we need to listen to scroll events ON those containers.
+    // But React events bubble. Let's try capturing it on the main element.
   };
 
-  const handleGlossaryScroll = (scrollingDown: boolean, currentScrollY: number) => {
-    if (scrollingDown && currentScrollY > 50) {
-      setShowMobileHeader(false);
-      setShowMobileNav(false);
-    } else {
-      setShowMobileNav(true);
-      if (currentScrollY <= 10) {
-        setShowMobileHeader(true);
+  // We need to attach the scroll listener to the actual scrollable element.
+  // In our layout, `main` has `overflow-hidden` and the children components (Glossary, etc) have `overflow-y-auto`.
+  // We can pass a prop or context, OR we can just handle the scroll logic inside each component and lift the state up.
+  // Or simpler: We can make `main` the scroll container for mobile?
+  // Current structure:
+  // App -> div (flex h-screen) -> main (flex-1 overflow-hidden) -> Glossary (flex col h-full) -> Content (flex-1 overflow-y-auto)
+  
+  // To implement the requested behavior globally without rewriting every component:
+  // We can pass a callback `onScroll` to the active component.
+  
+  const onContentScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const currentScrollY = e.currentTarget.scrollTop;
+    const isScrollingDown = currentScrollY > lastScrollY.current;
+    const scrollDifference = Math.abs(currentScrollY - lastScrollY.current);
+
+    // Only trigger if scroll difference is significant to avoid jitter
+    if (scrollDifference > 10) {
+      if (isScrollingDown && currentScrollY > 50) {
+        // Scroll Down -> Hide everything
+        setShowHeader(false);
+        setShowBottomNav(false);
+      } else {
+        // Scroll Up -> Show Bottom Nav & Search (if in Glossary)
+        setShowBottomNav(true);
+        // Header only comes back at the very top
+        if (currentScrollY < 20) {
+            setShowHeader(true);
+        }
       }
+      lastScrollY.current = currentScrollY;
     }
   };
 
@@ -208,7 +224,13 @@ const App: React.FC = () => {
       <div className="flex-1 flex flex-col h-full relative min-w-0">
         
         {/* Mobile Header */}
-        <header className={`md:hidden absolute top-0 left-0 right-0 h-16 bg-white dark:bg-slate-900 px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between z-30 transition-transform duration-300 ${showMobileHeader ? 'translate-y-0' : '-translate-y-full'}`}>
+        <header 
+          className={`
+            md:hidden flex-none bg-white dark:bg-slate-900 px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between z-20
+            transition-all duration-300 ease-in-out
+            ${showHeader ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 absolute w-full top-0'}
+          `}
+        >
           <div className="flex flex-col">
               <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-sm" style={{ backgroundColor: APP_ACCENT_COLOR }}>
@@ -230,40 +252,48 @@ const App: React.FC = () => {
 
         {/* Content Area */}
         <main className="flex-1 overflow-hidden relative flex flex-col bg-slate-50 dark:bg-slate-950">
-          <div className="flex-1 overflow-y-auto pt-16 md:pt-0" onScroll={handleGlobalScroll}>
-            {activeTab === Tab.GLOSSARY && <Glossary onScroll={handleGlossaryScroll} />}
-            {activeTab === Tab.ASSISTANT && <Assistant />}
-            {activeTab === Tab.SUBMIT && <SubmitTerm />}
-            {activeTab === Tab.ADMIN && <Admin />}
-            {activeTab === Tab.ABOUT && (
-              <div className="flex-1 bg-slate-50 dark:bg-slate-950">
-                <div className="p-6 space-y-4 max-w-2xl mx-auto w-full">
-                  <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 transition-colors">
-                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-4">About Vine Lingo</h2>
-                    <p className="text-slate-600 dark:text-slate-400 mb-6 leading-relaxed text-lg">
-                      This app is a quick-reference guide for Amazon Vine Voices. It helps demystify the acronyms and slang used in community forums and Discord servers.
-                    </p>
-                    
-                    <div className="flex items-start gap-4 text-sm text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                      <Info className="w-6 h-6 flex-shrink-0" style={{ color: APP_ACCENT_COLOR }} />
-                      <span className="leading-relaxed">We are not affiliated with Amazon. This is an independent community resource created to help new and existing Vine Voices navigate the program.</span>
-                    </div>
-                  </div>
+          {/* We pass the onContentScroll handler and showBottomNav state to children via props or cloneElement */}
+          {activeTab === Tab.GLOSSARY && <Glossary onScroll={onContentScroll} showControls={showBottomNav} />}
+          {activeTab === Tab.ASSISTANT && <Assistant />}
+          {activeTab === Tab.SUBMIT && <SubmitTerm />}
+          {activeTab === Tab.ADMIN && <Admin />}
+          {activeTab === Tab.ABOUT && (
+            <div 
+              className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950"
+              onScroll={onContentScroll}
+            >
+              <div className="p-6 space-y-4 max-w-2xl mx-auto w-full pb-24">
+                <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 transition-colors">
+                  <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-4">About Vine Lingo</h2>
+                  <p className="text-slate-600 dark:text-slate-400 mb-6 leading-relaxed text-lg">
+                    This app is a quick-reference guide for Amazon Vine Voices. It helps demystify the acronyms and slang used in community forums and Discord servers.
+                  </p>
                   
-                  <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 transition-colors">
-                    <h3 className="font-semibold text-slate-800 dark:text-white mb-2">Credits</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                      Built with React, Tailwind, and Google Gemini.
-                    </p>
+                  <div className="flex items-start gap-4 text-sm text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                    <Info className="w-6 h-6 flex-shrink-0" style={{ color: APP_ACCENT_COLOR }} />
+                    <span className="leading-relaxed">We are not affiliated with Amazon. This is an independent community resource created to help new and existing Vine Voices navigate the program.</span>
                   </div>
                 </div>
+                
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 transition-colors">
+                  <h3 className="font-semibold text-slate-800 dark:text-white mb-2">Credits</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Built with React, Tailwind, and Google Gemini.
+                  </p>
+                </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </main>
 
         {/* Mobile Bottom Navigation */}
-        <nav className={`md:hidden absolute bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 pb-safe pt-2 px-2 pb-4 z-30 transition-all duration-300 ${showMobileNav ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'}`}>
+        <nav 
+          className={`
+            md:hidden flex-none bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 pb-safe pt-2 px-2 pb-4 z-20 
+            transition-all duration-300 ease-in-out
+            ${showBottomNav ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 absolute w-full bottom-0'}
+          `}
+        >
           <div className="flex justify-around items-center">
             <NavButton tab={Tab.GLOSSARY} icon={Book} label="Glossary" />
             <NavButton tab={Tab.ASSISTANT} icon={MessageCircle} label="Assistant" />
