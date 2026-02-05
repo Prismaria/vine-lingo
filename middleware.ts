@@ -9,13 +9,6 @@ export async function middleware(req: Request) {
   const url = new URL(req.url);
   const termId = url.searchParams.get('term');
 
-  // We only care about requests with a term ID
-  if (!termId) {
-    return new Response(null, {
-      headers: { 'x-middleware-next': '1' },
-    });
-  }
-
   // FORCE the bot detection to true for a specific debug parameter
   // This helps you test if the HTML generation is working in your own browser
   const isDebug = url.searchParams.get('debug') === '1';
@@ -26,6 +19,71 @@ export async function middleware(req: Request) {
 
   // If it's a bot, we serve the HTML with meta tags
   if (isBot) {
+    // Handle base URL (main site)
+    if (!termId) {
+      const title = 'Vine Lingo - The Unofficial Vine Dictionary';
+      const description = 'A quick-reference guide for Amazon Vine Voices. Demystify acronyms and slang used in community forums and Discord servers.';
+      const ogImageUrl = `https://${url.host}/api/og`;
+
+      const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <meta name="description" content="${description}">
+    
+    <!-- Open Graph / Facebook / Discord -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="${url.toString()}">
+    <meta property="og:title" content="${title}">
+    <meta property="og:description" content="${description}">
+    <meta property="og:image" content="${ogImageUrl}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:site_name" content="Vine Lingo">
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="${url.toString()}">
+    <meta name="twitter:title" content="${title}">
+    <meta name="twitter:description" content="${description}">
+    <meta name="twitter:image" content="${ogImageUrl}">
+    
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#09BE82">
+    
+    <!-- Fallback for simple parsers -->
+    <meta itemprop="name" content="${title}">
+    <meta itemprop="description" content="${description}">
+    <meta itemprop="image" content="${ogImageUrl}">
+</head>
+<body style="font-family: sans-serif; background: #0f172a; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; text-align: center;">
+    <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 2rem;">
+        <div style="width: 80px; height: 80px; border-radius: 16px; background-color: #09BE82; display: flex; align-items: center; justify-center; color: white; font-size: 48px; font-weight: bold;">
+            V
+        </div>
+        <h1 style="font-size: 3rem; margin: 0;">Vine Lingo</h1>
+    </div>
+    <p style="font-size: 1.5rem; max-width: 800px; line-height: 1.6; color: #cbd5e1;">${description}</p>
+    <!-- We delay the redirect slightly for bots that execute JS -->
+    <script>
+      setTimeout(function() {
+        window.location.href = "/";
+      }, 500);
+    </script>
+</body>
+</html>`.trim();
+
+      return new Response(html, {
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        },
+      });
+    }
+
+    // Handle term permalink
     try {
       const supabaseUrl = process.env.VITE_SUPABASE_URL;
       const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
@@ -85,6 +143,7 @@ export async function middleware(req: Request) {
     <meta property="og:image" content="${ogImageUrl}">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
+    <meta property="og:site_name" content="Vine Lingo">
     
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image">
@@ -92,6 +151,9 @@ export async function middleware(req: Request) {
     <meta name="twitter:title" content="${title}">
     <meta name="twitter:description" content="${description}">
     <meta name="twitter:image" content="${ogImageUrl}">
+    
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#09BE82">
     
     <!-- Fallback for simple parsers -->
     <meta itemprop="name" content="${title}">
