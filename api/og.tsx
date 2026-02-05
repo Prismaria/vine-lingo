@@ -103,24 +103,103 @@ export default async function handler(req: Request) {
     }
 
     // Fetch term data from Supabase directly in the Edge Function
-    const supabaseUrl = process.env.VITE_SUPABASE_URL;
-    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase environment variables');
+      // Return default image if env vars are missing
+      return new ImageResponse(
+        (
+          <div
+            style={{
+              height: '100%',
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#0f172a',
+              padding: '40px',
+              fontFamily: 'sans-serif',
+            }}
+          >
+            <div style={{ color: 'white', fontSize: '48px' }}>Vine Lingo</div>
+          </div>
+        ),
+        {
+          width: 1200,
+          height: 630,
+        }
+      );
+    }
 
     const response = await fetch(
-      `${supabaseUrl}/rest/v1/terms?id=eq.${termId}&select=*`,
+      `${supabaseUrl}/rest/v1/terms?id=eq.${encodeURIComponent(termId)}&select=*`,
       {
         headers: {
-          apikey: supabaseKey!,
+          apikey: supabaseKey,
           Authorization: `Bearer ${supabaseKey}`,
         },
       }
     );
 
+    if (!response.ok) {
+      console.error(`Supabase fetch failed: ${response.status}`);
+      // Return default image on error
+      return new ImageResponse(
+        (
+          <div
+            style={{
+              height: '100%',
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#0f172a',
+              padding: '40px',
+              fontFamily: 'sans-serif',
+            }}
+          >
+            <div style={{ color: 'white', fontSize: '48px' }}>Vine Lingo</div>
+          </div>
+        ),
+        {
+          width: 1200,
+          height: 630,
+        }
+      );
+    }
+
     const data = await response.json();
     const term = data[0];
 
     if (!term) {
-      return new Response('Term not found', { status: 404 });
+      // Return default image if term not found
+      return new ImageResponse(
+        (
+          <div
+            style={{
+              height: '100%',
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#0f172a',
+              padding: '40px',
+              fontFamily: 'sans-serif',
+            }}
+          >
+            <div style={{ color: 'white', fontSize: '48px' }}>Term Not Found</div>
+          </div>
+        ),
+        {
+          width: 1200,
+          height: 630,
+        }
+      );
     }
 
     return new ImageResponse(
@@ -236,9 +315,30 @@ export default async function handler(req: Request) {
       }
     );
   } catch (e: any) {
-    console.log(`${e.message}`);
-    return new Response(`Failed to generate the image`, {
-      status: 500,
-    });
+    console.error('OG image generation error:', e);
+    // Return a fallback image on error
+    return new ImageResponse(
+      (
+        <div
+          style={{
+            height: '100%',
+            width: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#0f172a',
+            padding: '40px',
+            fontFamily: 'sans-serif',
+          }}
+        >
+          <div style={{ color: 'white', fontSize: '48px' }}>Vine Lingo</div>
+        </div>
+      ),
+      {
+        width: 1200,
+        height: 630,
+      }
+    );
   }
 }

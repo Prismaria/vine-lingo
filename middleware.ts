@@ -5,6 +5,18 @@ export const config = {
   ],
 };
 
+// Helper function to escape HTML entities
+function escapeHtml(text: string): string {
+  const map: { [key: string]: string } = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+  };
+  return text.replace(/[&<>"']/g, (m) => map[m]);
+}
+
 export async function middleware(req: Request) {
   const url = new URL(req.url);
   const termId = url.searchParams.get('term');
@@ -23,7 +35,10 @@ export async function middleware(req: Request) {
     if (!termId) {
       const title = 'Vine Lingo - The Unofficial Vine Dictionary';
       const description = 'A quick-reference guide for Amazon Vine Voices. Demystify acronyms and slang used in community forums and Discord servers.';
-      const ogImageUrl = `https://${url.host}/api/og`;
+      // Use absolute URL for the image - ensure https protocol
+      const protocol = url.protocol === 'https:' ? 'https' : 'https';
+      const ogImageUrl = `${protocol}://${url.host}/api/og`;
+      const canonicalUrl = `${protocol}://${url.host}${url.pathname}`;
 
       const html = `<!DOCTYPE html>
 <html lang="en">
@@ -35,17 +50,18 @@ export async function middleware(req: Request) {
     
     <!-- Open Graph / Facebook / Discord -->
     <meta property="og:type" content="website">
-    <meta property="og:url" content="${url.toString()}">
+    <meta property="og:url" content="${canonicalUrl}">
     <meta property="og:title" content="${title}">
     <meta property="og:description" content="${description}">
     <meta property="og:image" content="${ogImageUrl}">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
+    <meta property="og:image:type" content="image/png">
     <meta property="og:site_name" content="Vine Lingo">
     
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:url" content="${url.toString()}">
+    <meta name="twitter:url" content="${canonicalUrl}">
     <meta name="twitter:title" content="${title}">
     <meta name="twitter:description" content="${description}">
     <meta name="twitter:image" content="${ogImageUrl}">
@@ -122,10 +138,15 @@ export async function middleware(req: Request) {
         return new Response(null, { headers: { 'x-middleware-next': '1' } });
       }
 
-      const title = `${term.term} - Vine Lingo`;
-      const description = term.definition;
-      // Use absolute URL for the image
-      const ogImageUrl = `https://${url.host}/api/og?term=${termId}`;
+      // Escape HTML to prevent breaking meta tags
+      const escapedTerm = escapeHtml(term.term);
+      const escapedDefinition = escapeHtml(term.definition);
+      const title = `${escapedTerm} - Vine Lingo`;
+      const description = escapedDefinition;
+      // Use absolute URL for the image - ensure https protocol
+      const protocol = url.protocol === 'https:' ? 'https' : 'https';
+      const ogImageUrl = `${protocol}://${url.host}/api/og?term=${encodeURIComponent(termId)}`;
+      const canonicalUrl = `${protocol}://${url.host}${url.pathname}${url.search}`;
 
       const html = `<!DOCTYPE html>
 <html lang="en">
@@ -137,20 +158,22 @@ export async function middleware(req: Request) {
     
     <!-- Open Graph / Facebook / Discord -->
     <meta property="og:type" content="website">
-    <meta property="og:url" content="${url.toString()}">
+    <meta property="og:url" content="${canonicalUrl}">
     <meta property="og:title" content="${title}">
     <meta property="og:description" content="${description}">
     <meta property="og:image" content="${ogImageUrl}">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
+    <meta property="og:image:type" content="image/png">
     <meta property="og:site_name" content="Vine Lingo">
     
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:url" content="${url.toString()}">
+    <meta name="twitter:url" content="${canonicalUrl}">
     <meta name="twitter:title" content="${title}">
     <meta name="twitter:description" content="${description}">
     <meta name="twitter:image" content="${ogImageUrl}">
+    <meta name="twitter:image:alt" content="${escapedTerm} definition">
     
     <!-- Theme Color -->
     <meta name="theme-color" content="#09BE82">
@@ -161,8 +184,8 @@ export async function middleware(req: Request) {
     <meta itemprop="image" content="${ogImageUrl}">
 </head>
 <body style="font-family: sans-serif; background: #0f172a; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; text-align: center;">
-    <h1 style="font-size: 3rem; margin-bottom: 1rem;">${term.term}</h1>
-    <p style="font-size: 1.5rem; max-width: 800px; line-height: 1.6; color: #cbd5e1;">${term.definition}</p>
+    <h1 style="font-size: 3rem; margin-bottom: 1rem;">${escapedTerm}</h1>
+    <p style="font-size: 1.5rem; max-width: 800px; line-height: 1.6; color: #cbd5e1;">${escapedDefinition}</p>
     <!-- We delay the redirect slightly for bots that execute JS -->
     <script>
       setTimeout(function() {
