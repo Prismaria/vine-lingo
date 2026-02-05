@@ -1,83 +1,86 @@
-
 import { NextRequest } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
 export const config = {
   runtime: 'edge',
 };
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-const supabase = createClient(supabaseUrl!, supabaseAnonKey!);
-
 export default async function handler(req: NextRequest) {
-  const { searchParams, origin } = new URL(req.url);
+  const { searchParams } = new URL(req.url);
   const termId = searchParams.get('term');
 
   if (!termId) {
-    return fetch(`${origin}/index.html`);
+    return new Response('Missing term ID', { status: 400 });
   }
 
-  try {
-    // 1. Fetch term from Supabase
-    const { data: term, error } = await supabase
-      .from('terms')
-      .select('*')
-      .eq('id', termId)
-      .single();
+  // Fetch term data from Supabase
+  const supabaseUrl = process.env.VITE_SUPABASE_URL;
+  const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
 
-    if (error || !term) {
-      return fetch(`${origin}/index.html`);
-    }
-
-    // 2. Fetch the base HTML
-    const response = await fetch(`${origin}/index.html`);
-    let html = await response.text();
-
-    // 3. Prepare dynamic metadata
-    const title = `${term.term} | Vine Lingo`;
-    const description = term.definition;
-    const ogImage = `${origin}/api/og?term=${termId}`;
-    const pageUrl = `${origin}/?term=${termId}`;
-
-    // 4. Inject metadata into HTML
-    // We replace the generic tags with specific ones
-    html = html.replace(/<title>.*?<\/title>/, `<title>${title}</title>`);
-    
-    // Replace description
-    html = html.replace(/<meta name="description" content=".*?" \/>/, `<meta name="description" content="${description}" />`);
-    
-    // Replace OG tags
-    html = html.replace(/<meta property="og:title" content=".*?" \/>/, `<meta property="og:title" content="${title}" />`);
-    html = html.replace(/<meta property="og:description" content=".*?" \/>/, `<meta property="og:description" content="${description}" />`);
-    html = html.replace(/<meta property="og:url" content=".*?" \/>/, `<meta property="og:url" content="${pageUrl}" />`);
-    
-    // Add/Replace og:image (important!)
-    if (html.includes('property="og:image"')) {
-      html = html.replace(/<meta property="og:image" content=".*?" \/>/, `<meta property="og:image" content="${ogImage}" />`);
-    } else {
-      html = html.replace('</head>', `<meta property="og:image" content="${ogImage}" />\n    <meta property="og:image:width" content="1200" />\n    <meta property="og:image:height" content="630" />\n</head>`);
-    }
-
-    // Replace Twitter tags
-    html = html.replace(/<meta name="twitter:title" content=".*?" \/>/, `<meta name="twitter:title" content="${title}" />`);
-    html = html.replace(/<meta name="twitter:description" content=".*?" \/>/, `<meta name="twitter:description" content="${description}" />`);
-    html = html.replace(/<meta name="twitter:url" content=".*?" \/>/, `<meta name="twitter:url" content="${pageUrl}" />`);
-    
-    if (html.includes('name="twitter:image"')) {
-      html = html.replace(/<meta name="twitter:image" content=".*?" \/>/, `<meta name="twitter:image" content="${ogImage}" />`);
-    } else {
-      html = html.replace('</head>', `<meta name="twitter:image" content="${ogImage}" />\n</head>`);
-    }
-
-    return new Response(html, {
+  const response = await fetch(
+    `${supabaseUrl}/rest/v1/terms?id=eq.${termId}&select=*`,
+    {
       headers: {
-        'Content-Type': 'text/html; charset=utf-8',
+        apikey: supabaseKey!,
+        Authorization: `Bearer ${supabaseKey}`,
       },
-    });
-  } catch (e) {
-    console.error('Error in share handler:', e);
-    return fetch(`${origin}/index.html`);
+    }
+  );
+
+  const data = await response.json();
+  const term = data[0];
+
+  if (!term) {
+    // If term not found, just return generic HTML
+    return new Response(
+      `<html><head><title>Vine Lingo</title></head><body>Redirecting...</body></html>`,
+      { headers: { 'Content-Type': 'text/html' } }
+    );
   }
+
+  const title = `${term.term} - Vine Lingo`;
+  const description = term.definition;
+  const ogImageUrl = `https://${req.headers.get('host')}/api/og?term=${termId}`;
+
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Dynamic Meta Tags for Bots -->
+    <title>${title}</title>
+    <meta name="description" content="${description}">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="${title}">
+    <meta property="og:description" content="${description}">
+    <meta property="og:image" content="${ogImageUrl}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="${title}">
+    <meta name="twitter:description" content="${description}">
+    <meta name="twitter:image" content="${ogImageUrl}">
+
+    <!-- Redirect for real users just in case -->
+    <meta http-equiv="refresh" content="0; url=/?term=${termId}">
+</head>
+<body>
+    <h1>${term.term}</h1>
+    <p>${term.definition}</p>
+    <script>window.location.href = "/?term=${termId}";</script>
+</body>
+</html>
+  `.trim();
+
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html',
+      'Cache-Control': 's-maxage=3600, stale-while-revalidate',
+    },
+  });
 }

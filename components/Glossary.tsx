@@ -79,16 +79,6 @@ export const Glossary: React.FC<GlossaryProps> = ({ onScroll, showControls = tru
     });
   }, [searchTerm, selectedCategory, terms, window.location.search]);
 
-  // Update document title for the browser tab
-  useEffect(() => {
-    const isPermalinkMode = filteredTerms.length === 1 && new URLSearchParams(window.location.search).has('term');
-    if (isPermalinkMode) {
-      document.title = `${filteredTerms[0].term} | Vine Lingo`;
-    } else {
-      document.title = 'Vine Lingo | The Unofficial Vine Dictionary';
-    }
-  }, [filteredTerms]);
-
   // Handle back button to clear permalink
   useEffect(() => {
     const handlePopState = () => {
@@ -321,18 +311,14 @@ export const Glossary: React.FC<GlossaryProps> = ({ onScroll, showControls = tru
                           {term.term}
                         </h3>
                         <div className="flex gap-1">
-                            {!isEditMode && (
-                                <>
-                                  {!isPermalinkMode && (
-                                    <button 
-                                      onClick={(e) => handleCopyPermalink(e, term.id)}
-                                      className="p-1.5 rounded-lg text-slate-400 hover:text-[#09BE82] hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                                      title="Copy Permalink"
-                                    >
-                                      {copiedId === term.id ? <Check className="w-4 h-4 text-green-500" /> : <LinkIcon className="w-4 h-4" />}
-                                    </button>
-                                  )}
-                                </>
+                            {!isEditMode && !isPermalinkMode && (
+                                <button 
+                                onClick={(e) => handleCopyPermalink(e, term.id)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-[#09BE82] hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                                title="Copy Permalink"
+                                >
+                                {copiedId === term.id ? <Check className="w-4 h-4 text-green-500" /> : <LinkIcon className="w-4 h-4" />}
+                                </button>
                             )}
                             {isEditMode ? (
                             <>
