@@ -79,6 +79,59 @@ export const Glossary: React.FC<GlossaryProps> = ({ onScroll, showControls = tru
     });
   }, [searchTerm, selectedCategory, terms, window.location.search]);
 
+  // Dynamic Metadata for Permalinks
+  useEffect(() => {
+    const isPermalinkMode = filteredTerms.length === 1 && new URLSearchParams(window.location.search).has('term');
+    
+    if (isPermalinkMode) {
+      const term = filteredTerms[0];
+      const title = `${term.term} | Vine Lingo`;
+      const description = term.definition;
+      const url = window.location.href;
+
+      document.title = title;
+      
+      // Update meta tags helper
+      const updateMeta = (property: string, content: string, attr: string = 'property') => {
+        let el = document.querySelector(`meta[${attr}="${property}"]`);
+        if (!el) {
+          el = document.createElement('meta');
+          el.setAttribute(attr, property);
+          document.head.appendChild(el);
+        }
+        el.setAttribute('content', content);
+      };
+
+      updateMeta('description', description, 'name');
+      updateMeta('og:title', title);
+      updateMeta('og:description', description);
+      updateMeta('og:url', url);
+      updateMeta('twitter:title', title, 'name');
+      updateMeta('twitter:description', description, 'name');
+      updateMeta('twitter:url', url, 'name');
+    } else {
+      // Reset to defaults
+      const defaultTitle = 'Vine Lingo | The Unofficial Vine Dictionary';
+      const defaultDesc = 'A modern, mobile-friendly glossary for the Amazon Vine community. Demystifying acronyms and slang like ETV, RFY, AFA, and more.';
+      const defaultUrl = 'https://vine-lingo.vercel.app/';
+
+      document.title = defaultTitle;
+      
+      const updateMeta = (property: string, content: string, attr: string = 'property') => {
+        const el = document.querySelector(`meta[${attr}="${property}"]`);
+        if (el) el.setAttribute('content', content);
+      };
+
+      updateMeta('description', defaultDesc, 'name');
+      updateMeta('og:title', defaultTitle);
+      updateMeta('og:description', defaultDesc);
+      updateMeta('og:url', defaultUrl);
+      updateMeta('twitter:title', defaultTitle, 'name');
+      updateMeta('twitter:description', defaultDesc, 'name');
+      updateMeta('twitter:url', defaultUrl, 'name');
+    }
+  }, [filteredTerms]);
+
   // Handle back button to clear permalink
   useEffect(() => {
     const handlePopState = () => {
