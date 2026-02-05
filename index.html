@@ -25,6 +25,11 @@
     
     <!-- Theme Color -->
     <meta name="theme-color" content="#09BE82" />
+    
+    <noscript>
+      <meta http-equiv="refresh" content="0; url=/?nojs=1">
+    </noscript>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -80,22 +85,12 @@
 </head>
   <body class="bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
     <noscript>
-      <div style="max-width: 800px; margin: 40px auto; padding: 30px; background: white; border: 1px solid #e2e8f0; border-radius: 16px; font-family: system-ui, sans-serif; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
-        <h1 style="color: #09BE82; margin-top: 0;">JavaScript Disabled</h1>
-        <p style="color: #475569; font-size: 1.1rem; line-height: 1.6;">It looks like JavaScript is disabled in your browser. While Vine Lingo is a modern app, we've prepared a static version so you can still access the glossary content.</p>
-        
-        <div style="margin: 30px 0; padding: 20px; background: #f8fafc; border-radius: 12px; border: 1px dashed #cbd5e1;">
-          <h2 style="font-size: 1.25rem; margin-top: 0;">Quick Reference</h2>
-          <ul style="padding-left: 20px; color: #334155;">
-            <li><strong>ETV:</strong> Estimated Tax Value. The fair market value of an item reported to the IRS.</li>
-            <li><strong>RFY:</strong> Recommended For You. Your personalized item queue.</li>
-            <li><strong>AFA:</strong> Available For All. Items visible to all Vine Voices.</li>
-            <li><strong>AI:</strong> Additional Items. The main catch-all queue.</li>
-          </ul>
-          <a href="/?nojs=1" style="display: inline-block; margin-top: 10px; background: #09BE82; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">View Full Static Glossary</a>
-        </div>
-        
-        <p style="font-size: 0.9rem; color: #94a3b8;">To use the interactive search, filters, and AI assistant, please enable JavaScript.</p>
+      <div style="max-width: 800px; margin: 40px auto; padding: 30px; background: white; border: 1px solid #e2e8f0; border-radius: 16px; font-family: system-ui, sans-serif; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); text-align: center;">
+        <h1 style="color: #09BE82; margin-top: 0;">Redirecting to Static Glossary...</h1>
+        <p style="color: #475569; font-size: 1.1rem; line-height: 1.6;">JavaScript is disabled. We are redirecting you to our high-compatibility version.</p>
+        <p style="margin: 20px 0;">
+          <a href="/?nojs=1" style="display: inline-block; background: #09BE82; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">Click here if you are not redirected</a>
+        </p>
       </div>
     </noscript>
     <div id="root"></div>
