@@ -6,6 +6,27 @@ import { TermCategory, Term } from '../types';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
 
+// Utility function to create a URL-friendly slug from a term name
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '') // Remove special characters
+    .replace(/[\s_-]+/g, '-') // Replace spaces, underscores, and multiple hyphens with single hyphen
+    .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
+}
+
+// Utility function to find term by slug or ID
+function findTermBySlugOrId(terms: Term[], identifier: string): Term | undefined {
+  // First try to find by slug (most common case)
+  const slug = slugify(identifier);
+  const bySlug = terms.find(t => slugify(t.term) === slug);
+  if (bySlug) return bySlug;
+  
+  // Fallback to ID lookup (for backward compatibility)
+  return terms.find(t => t.id === identifier);
+}
+
 interface GlossaryProps {
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
   showControls?: boolean;
@@ -43,16 +64,12 @@ export const Glossary: React.FC<GlossaryProps> = ({ onScroll, showControls = tru
       
       // Check URL parameters for permalink
       const urlParams = new URLSearchParams(window.location.search);
-      const termId = urlParams.get('term');
-      if (termId) {
-        setExpandedId(termId);
-        // Find the term and scroll to it if possible?
-        // Actually, user wants "a page only displaying that one definition".
-        // We can filter the list if termId exists.
-        if (termId) {
-          // If termId is present, we might want to isolate it or just expand it.
-          // User said "directs to a page only displaying that one definition".
-          // So we should probably filter by ID if it's in the URL.
+      const termParam = urlParams.get('term');
+      if (termParam) {
+        // Find term by slug or ID and set expanded ID
+        const foundTerm = findTermBySlugOrId(data as Term[], termParam);
+        if (foundTerm) {
+          setExpandedId(foundTerm.id);
         }
       }
     } catch (error) {
@@ -65,10 +82,12 @@ export const Glossary: React.FC<GlossaryProps> = ({ onScroll, showControls = tru
   const filteredTerms = useMemo(() => {
     // Check for permalink param
     const urlParams = new URLSearchParams(window.location.search);
-    const permalinkId = urlParams.get('term');
+    const permalinkParam = urlParams.get('term');
 
-    if (permalinkId) {
-       return terms.filter(t => t.id === permalinkId);
+    if (permalinkParam) {
+      // Find term by slug or ID
+      const foundTerm = findTermBySlugOrId(terms, permalinkParam);
+      return foundTerm ? [foundTerm] : [];
     }
 
     return terms.filter((term) => {
@@ -77,7 +96,7 @@ export const Glossary: React.FC<GlossaryProps> = ({ onScroll, showControls = tru
       const matchesCategory = selectedCategory === TermCategory.ALL || term.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
-  }, [searchTerm, selectedCategory, terms, window.location.search]);
+  }, [searchTerm, selectedCategory, terms]);
 
   // Handle back button to clear permalink
   useEffect(() => {
@@ -119,12 +138,14 @@ export const Glossary: React.FC<GlossaryProps> = ({ onScroll, showControls = tru
     setIsModalOpen(true);
   };
 
-  const handleCopyPermalink = (e: React.MouseEvent, id: string) => {
+  const handleCopyPermalink = (e: React.MouseEvent, term: Term) => {
     e.stopPropagation();
     const url = new URL(window.location.href);
-    url.searchParams.set('term', id);
+    // Use slugified term name instead of ID
+    const slug = slugify(term.term);
+    url.searchParams.set('term', slug);
     navigator.clipboard.writeText(url.toString());
-    setCopiedId(id);
+    setCopiedId(term.id);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
@@ -313,7 +334,7 @@ export const Glossary: React.FC<GlossaryProps> = ({ onScroll, showControls = tru
                         <div className="flex gap-1">
                             {!isEditMode && !isPermalinkMode && (
                                 <button 
-                                onClick={(e) => handleCopyPermalink(e, term.id)}
+                                onClick={(e) => handleCopyPermalink(e, term)}
                                 className="p-1.5 rounded-lg text-slate-400 hover:text-[#09BE82] hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                                 title="Copy Permalink"
                                 >

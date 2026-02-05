@@ -4,13 +4,29 @@ export const config = {
   runtime: 'edge',
 };
 
+// Helper function to create a URL-friendly slug from a term name
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '') // Remove special characters
+    .replace(/[\s_-]+/g, '-') // Replace spaces, underscores, and multiple hyphens with single hyphen
+    .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
+}
+
+// Check if a string looks like a UUID
+function isUUID(str: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+}
+
 export default async function handler(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const termId = searchParams.get('term');
+    const termParam = searchParams.get('term');
 
-    // If no term ID, return default site OG image
-    if (!termId) {
+    // If no term parameter, return default site OG image
+    if (!termParam) {
       return new ImageResponse(
         (
           <div
@@ -134,46 +150,71 @@ export default async function handler(req: Request) {
       );
     }
 
-    const response = await fetch(
-      `${supabaseUrl}/rest/v1/terms?id=eq.${encodeURIComponent(termId)}&select=*`,
-      {
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-        },
-      }
-    );
+    let term: any = null;
 
-    if (!response.ok) {
-      console.error(`Supabase fetch failed: ${response.status}`);
-      // Return default image on error
-      return new ImageResponse(
-        (
-          <div
-            style={{
-              height: '100%',
-              width: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: '#0f172a',
-              padding: '40px',
-              fontFamily: 'sans-serif',
-            }}
-          >
-            <div style={{ color: 'white', fontSize: '48px' }}>Vine Lingo</div>
-          </div>
-        ),
+    // Try to find by slug first (if it doesn't look like a UUID)
+    if (!isUUID(termParam)) {
+      const slug = termParam.toLowerCase().trim();
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/terms?select=*&status=eq.approved`,
         {
-          width: 1200,
-          height: 630,
+          headers: {
+            apikey: supabaseKey,
+            Authorization: `Bearer ${supabaseKey}`,
+          },
         }
       );
+
+      if (response.ok) {
+        const data = await response.json();
+        // Find term where slugified name matches
+        term = data.find((t: any) => slugify(t.term) === slug);
+      }
     }
 
-    const data = await response.json();
-    const term = data[0];
+    // If not found by slug, or if it's a UUID, try ID lookup
+    if (!term) {
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/terms?id=eq.${encodeURIComponent(termParam)}&select=*`,
+        {
+          headers: {
+            apikey: supabaseKey,
+            Authorization: `Bearer ${supabaseKey}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        console.error(`Supabase fetch failed: ${response.status}`);
+        // Return default image on error
+        return new ImageResponse(
+          (
+            <div
+              style={{
+                height: '100%',
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: '#0f172a',
+                padding: '40px',
+                fontFamily: 'sans-serif',
+              }}
+            >
+              <div style={{ color: 'white', fontSize: '48px' }}>Vine Lingo</div>
+            </div>
+          ),
+          {
+            width: 1200,
+            height: 630,
+          }
+        );
+      }
+
+      const data = await response.json();
+      term = data[0];
+    }
 
     if (!term) {
       // Return default image if term not found

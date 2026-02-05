@@ -17,6 +17,22 @@ function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (m) => map[m]);
 }
 
+// Helper function to create a URL-friendly slug from a term name
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '') // Remove special characters
+    .replace(/[\s_-]+/g, '-') // Replace spaces, underscores, and multiple hyphens with single hyphen
+    .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
+}
+
+// Check if a string looks like a UUID
+function isUUID(str: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+}
+
 export async function middleware(req: Request) {
   const url = new URL(req.url);
   const termId = url.searchParams.get('term');
@@ -101,8 +117,8 @@ export async function middleware(req: Request) {
 
     // Handle term permalink
     try {
-      const supabaseUrl = process.env.VITE_SUPABASE_URL;
-      const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+      const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+      const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
 
       if (!supabaseUrl || !supabaseKey) {
         if (isDebug) {
@@ -111,25 +127,51 @@ export async function middleware(req: Request) {
         return new Response(null, { headers: { 'x-middleware-next': '1' } });
       }
 
-      const response = await fetch(
-        `${supabaseUrl}/rest/v1/terms?id=eq.${termId}&select=*`,
-        {
-          headers: {
-            apikey: supabaseKey,
-            Authorization: `Bearer ${supabaseKey}`,
-          },
-        }
-      );
+      let term: any = null;
 
-      if (!response.ok) {
-        if (isDebug) {
-          return new Response(`Supabase Fetch Error: ${response.status} ${response.statusText}`, { status: 500 });
+      // Try to find by slug first (if it doesn't look like a UUID)
+      if (!isUUID(termId)) {
+        // Query all approved terms and find by slug
+        const slug = termId.toLowerCase().trim();
+        const response = await fetch(
+          `${supabaseUrl}/rest/v1/terms?select=*&status=eq.approved`,
+          {
+            headers: {
+              apikey: supabaseKey,
+              Authorization: `Bearer ${supabaseKey}`,
+            },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          // Find term where slugified name matches
+          term = data.find((t: any) => slugify(t.term) === slug);
         }
-        return new Response(null, { headers: { 'x-middleware-next': '1' } });
       }
 
-      const data = await response.json();
-      const term = data[0];
+      // If not found by slug, or if it's a UUID, try ID lookup
+      if (!term) {
+        const response = await fetch(
+          `${supabaseUrl}/rest/v1/terms?id=eq.${encodeURIComponent(termId)}&select=*`,
+          {
+            headers: {
+              apikey: supabaseKey,
+              Authorization: `Bearer ${supabaseKey}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          if (isDebug) {
+            return new Response(`Supabase Fetch Error: ${response.status} ${response.statusText}`, { status: 500 });
+          }
+          return new Response(null, { headers: { 'x-middleware-next': '1' } });
+        }
+
+        const data = await response.json();
+        term = data[0];
+      }
 
       if (!term) {
         if (isDebug) {
@@ -143,9 +185,10 @@ export async function middleware(req: Request) {
       const escapedDefinition = escapeHtml(term.definition);
       const title = `${escapedTerm} - Vine Lingo`;
       const description = escapedDefinition;
-      // Use absolute URL for the image - ensure https protocol
+      // Use absolute URL for the image - use slug for better URLs
       const protocol = url.protocol === 'https:' ? 'https' : 'https';
-      const ogImageUrl = `${protocol}://${url.host}/api/og?term=${encodeURIComponent(termId)}`;
+      const termSlug = slugify(term.term);
+      const ogImageUrl = `${protocol}://${url.host}/api/og?term=${encodeURIComponent(termSlug)}`;
       const canonicalUrl = `${protocol}://${url.host}${url.pathname}${url.search}`;
 
       const html = `<!DOCTYPE html>
@@ -189,7 +232,7 @@ export async function middleware(req: Request) {
     <!-- We delay the redirect slightly for bots that execute JS -->
     <script>
       setTimeout(function() {
-        window.location.href = "/?term=${termId}";
+        window.location.href = "/?term=${termSlug}";
       }, 500);
     </script>
 </body>
