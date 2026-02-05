@@ -1,6 +1,7 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { Search, ChevronDown, ChevronUp, Hash, Loader2, Edit2, Trash2, Plus, X, Save, Link as LinkIcon, Check } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Search, ChevronDown, ChevronUp, Hash, Loader2, Edit2, Trash2, Plus, X, Save, Link as LinkIcon, Check, Download, Image as ImageIcon } from 'lucide-react';
+import { toPng } from 'html-to-image';
 import { APP_ACCENT_COLOR, CATEGORIES } from '../constants';
 import { TermCategory, Term } from '../types';
 import { supabase } from '../supabaseClient';
@@ -25,6 +26,40 @@ export const Glossary: React.FC<GlossaryProps> = ({ onScroll, showControls = tru
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTerm, setEditingTerm] = useState<Partial<Term> | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCapturing, setIsCapturing] = useState<string | null>(null);
+
+  const handleDownloadImage = async (e: React.MouseEvent, id: string, termName: string) => {
+    e.stopPropagation();
+    const element = document.getElementById(`term-card-${id}`);
+    if (!element) return;
+
+    setIsCapturing(id);
+    try {
+      // Small delay to ensure any layout changes are settled
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const dataUrl = await toPng(element, {
+        cacheBust: true,
+        backgroundColor: document.documentElement.classList.contains('dark') ? '#0f172a' : '#f8fafc',
+        style: {
+          borderRadius: '12px',
+          margin: '0',
+          padding: '20px',
+          width: element.offsetWidth + 'px',
+        }
+      });
+      
+      const link = document.createElement('a');
+      link.download = `vine-lingo-${termName.toLowerCase().replace(/\s+/g, '-')}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.error('Error generating image:', err);
+      alert('Failed to generate image. Please try again.');
+    } finally {
+      setIsCapturing(null);
+    }
+  };
 
   useEffect(() => {
     fetchTerms();
@@ -344,6 +379,7 @@ export const Glossary: React.FC<GlossaryProps> = ({ onScroll, showControls = tru
               {filteredTerms.map((term) => (
                 <div 
                   key={term.id} 
+                  id={`term-card-${term.id}`}
                   onClick={() => toggleExpand(term.id)}
                   className={`
                     bg-white dark:bg-slate-900 rounded-xl shadow-sm border overflow-hidden transition-all duration-200 h-fit 
@@ -364,14 +400,26 @@ export const Glossary: React.FC<GlossaryProps> = ({ onScroll, showControls = tru
                           {term.term}
                         </h3>
                         <div className="flex gap-1">
-                            {!isEditMode && !isPermalinkMode && (
-                                <button 
-                                onClick={(e) => handleCopyPermalink(e, term.id)}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-[#09BE82] hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                                title="Copy Permalink"
-                                >
-                                {copiedId === term.id ? <Check className="w-4 h-4 text-green-500" /> : <LinkIcon className="w-4 h-4" />}
-                                </button>
+                            {!isEditMode && (
+                                <>
+                                  <button 
+                                    onClick={(e) => handleDownloadImage(e, term.id, term.term)}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-[#09BE82] hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                                    title="Download as Image"
+                                    disabled={isCapturing === term.id}
+                                  >
+                                    {isCapturing === term.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                                  </button>
+                                  {!isPermalinkMode && (
+                                    <button 
+                                      onClick={(e) => handleCopyPermalink(e, term.id)}
+                                      className="p-1.5 rounded-lg text-slate-400 hover:text-[#09BE82] hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                                      title="Copy Permalink"
+                                    >
+                                      {copiedId === term.id ? <Check className="w-4 h-4 text-green-500" /> : <LinkIcon className="w-4 h-4" />}
+                                    </button>
+                                  )}
+                                </>
                             )}
                             {isEditMode ? (
                             <>
